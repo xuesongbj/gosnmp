@@ -18,51 +18,29 @@ import (
 )
 
 const (
-	// maxOids is the maximum number of oids allowed in a Get()
-	maxOids = 60
+	maxOids               = 60            // maxOids is the maximum number of oids allowed in a Get()
+	baseOid               = "1.3.6.1.2.1" // Base OID for MIB-2 defined SNMP variables
+	defaultMaxRepetitions = 50            // Java SNMP uses 50, snmp-net uses 10
+	defaultNonRepeaters   = 0             // TODO comment
 
-	// Base OID for MIB-2 defined SNMP variables
-	baseOid = "1.3.6.1.2.1"
-
-	// Java SNMP uses 50, snmp-net uses 10
-	defaultMaxRepetitions = 50
-
-	// TODO comment
-	defaultNonRepeaters = 0
 )
 
 // GoSNMP represents GoSNMP library state
 type GoSNMP struct {
-
-	// Target is an ipv4 address
-	Target string
-
-	// Port is a udp port
-	Port uint16
-
-	// Community is an SNMP Community string
-	Community string
-
-	// Version is an SNMP Version
-	Version SnmpVersion
-
-	// Timeout is the timeout for the SNMP Query
-	Timeout time.Duration
-
-	// Set the number of retries to attempt within timeout.
-	Retries int
-
-	// Conn is net connection to use, typically establised using GoSNMP.Connect()
-	Conn net.Conn
+	Target    string        // Target is an ipv4 address
+	Port      uint16        // Port is a udp port
+	Community string        // Community is an SNMP Community string
+	Version   SnmpVersion   // Version is an SNMP Version
+	Timeout   time.Duration // Timeout is the timeout for the SNMP Query
+	Retries   int           // Set the number of retries to attempt within timeout.
+	Conn      net.Conn      // Conn is net connection to use, typically establised using GoSNMP.Connect()
+	requestID uint32        // Internal - used to sync requests to responses
+	random    *rand.Rand    // Internal - used to sync requests to responses
 
 	// Logger is the GoSNMP.Logger to use for debugging. If nil, debugging
 	// output will be discarded (/dev/null). For verbose logging to stdout:
 	// x.Logger = log.New(os.Stdout, "", 0)
 	Logger Logger
-
-	// Internal - used to sync requests to responses
-	requestID uint32
-	random    *rand.Rand
 }
 
 // The default connection settings
@@ -76,15 +54,9 @@ var Default = &GoSNMP{
 
 // SnmpPDU will be used when doing SNMP Set's
 type SnmpPDU struct {
-
-	// Name is an oid in string format eg "1.3.6.1.4.9.27"
-	Name string
-
-	// The type of the value eg Integer
-	Type Asn1BER
-
-	// The value to be set by the SNMP set
-	Value interface{}
+	Name  string      // Name is an oid in string format eg "1.3.6.1.4.9.27"
+	Type  Asn1BER     // The type of the value eg Integer
+	Value interface{} // The value to be set by the SNMP set
 }
 
 // Asn1BER is the type of the SNMP PDU
