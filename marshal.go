@@ -27,7 +27,7 @@ type SnmpVersion uint8
 // SnmpVersion 1 and 2c implemented, 3 planned
 const (
 	Version1  SnmpVersion = 0x0
-	Version2c SnmpVersion = 0x1
+	Version2c             = 0x1
 )
 
 // SnmpPacket struct represents the entire SNMP Message or Sequence at the
@@ -56,12 +56,12 @@ type PDUType byte
 // The currently supported PDUType's
 const (
 	Sequence       PDUType = 0x30
-	GetRequest     PDUType = 0xa0
-	GetNextRequest PDUType = 0xa1
-	GetResponse    PDUType = 0xa2
-	SetRequest     PDUType = 0xa3
-	Trap           PDUType = 0xa4
-	GetBulkRequest PDUType = 0xa5
+	GetRequest             = 0xa0
+	GetNextRequest         = 0xa1
+	GetResponse            = 0xa2
+	SetRequest             = 0xa3
+	Trap                   = 0xa4
+	GetBulkRequest         = 0xa5
 )
 
 const (
@@ -281,7 +281,7 @@ func (packet *SnmpPacket) marshalVBL(pdus []SnmpPDU) ([]byte, error) {
 		return nil, err
 	}
 
-	// FIX does bytes.Buffer give better performance than byte slices?
+	// FIXME does bytes.Buffer give better performance than byte slices?
 	result := []byte{byte(Sequence)}
 	result = append(result, vblLengthBytes...)
 	result = append(result, vblBytes...)
@@ -389,7 +389,7 @@ func unmarshalResponse(packet []byte, response *SnmpPacket, length int, requestT
 	}
 	slog.Printf("getResponseLength: %d", getResponseLength)
 
-	// Parse Request-ID
+	// Parse RequestID
 	rawRequestID, count, err := parseRawField(packet[cursor:], "request id")
 	if err != nil {
 		return nil, fmt.Errorf("Error parsing SNMP packet request ID: %s", err.Error())

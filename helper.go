@@ -507,9 +507,7 @@ func parseUint(bytes []byte) (uint, error) {
 }
 
 // Issue 4389: math/big: add SetUint64 and Uint64 functions to *Int
-//
 // uint64ToBigInt copied from: http://github.com/cznic/mathutil/blob/master/mathutil.go#L341
-//
 // replace with Uint64ToBigInt or equivalent when using Go 1.1
 
 var uint64ToBigIntDelta big.Int
