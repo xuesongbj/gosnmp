@@ -93,6 +93,9 @@ type SnmpPDU struct {
 
 	// The value to be set by the SNMP set
 	Value interface{}
+
+	// The value in raw bytes
+	RawValue []byte
 }
 
 // Asn1BER is the type of the SNMP PDU
@@ -154,7 +157,7 @@ func (x *GoSNMP) Get(oids []string) (result *SnmpPacket, err error) {
 	// convert oids slice to pdu slice
 	var pdus []SnmpPDU
 	for _, oid := range oids {
-		pdus = append(pdus, SnmpPDU{oid, Null, nil})
+		pdus = append(pdus, SnmpPDU{oid, Null, nil, nil})
 	}
 	// build up SnmpPacket
 	packetOut := &SnmpPacket{
@@ -197,7 +200,7 @@ func (x *GoSNMP) GetNext(oids []string) (result *SnmpPacket, err error) {
 	// convert oids slice to pdu slice
 	var pdus []SnmpPDU
 	for _, oid := range oids {
-		pdus = append(pdus, SnmpPDU{oid, Null, nil})
+		pdus = append(pdus, SnmpPDU{oid, Null, nil, nil})
 	}
 
 	// Marshal and send the packet
@@ -223,7 +226,7 @@ func (x *GoSNMP) GetBulk(oids []string, nonRepeaters uint8, maxRepetitions uint8
 	// convert oids slice to pdu slice
 	var pdus []SnmpPDU
 	for _, oid := range oids {
-		pdus = append(pdus, SnmpPDU{oid, Null, nil})
+		pdus = append(pdus, SnmpPDU{oid, Null, nil, nil})
 	}
 
 	// Marshal and send the packet
