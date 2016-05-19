@@ -1,0 +1,49 @@
+I was stuck in another project and just found some time to get the diff for the snmp v3 trap support. I also added a minor fix that fixes the marshaling in a 32 bit processor for atomic increment of a 64 bit entity.
+
+I have added info regarding the netsnmp snmptrapd setup in this mail.
+
+Proposed test setup:
+
+On the receiving host, disable any firewall software or configure port 162/udp ingress.
+
+
+As root, download and build net-snmp (available from this link). Configure per the instructions.
+
+Make and run “make test” to verify the build, then run “make install”.
+
+
+Create a temporary directory and in that directory, create snmptrapd.conf.
+
+Add the following text to that file, replacing the passwords and engine ID as needed:
+
+# user1 requires authorization and encryption (authPriv)
+
+createUser -e 0x000badf00d0badf00d user1 SHA "authpass" AES "encrpass"
+
+authUser log,execute,net user1 priv
+
+# user2 requires authorization, not encryption (authPriv, authNoPriv)
+
+createUser -e 0x000badf00d0badf00d user2 SHA "authpass" AES "encrpass"
+
+authUser log,execute,net user2
+
+# user3 requires neither one (authPriv, authNoPriv, noAuthNoPriv)
+
+createUser -e 0x000badf00d0badf00d user3 SHA "authpass" AES "encrpass"
+
+authUser log,execute,net user3 noauth
+
+Start the snmptrapd executable as a console application (rather than a daemon) so that you can see the outputs:
+
+# snmptrapd -f -c ./snmptrapd.conf -Oa -Le -Dsnmp_parse -M +/usr/local/share/snmp/mibs -mall
+
+modify example5.go gosnmp params to match the snmptrapd user configuration, compile and execute it.
+
+
+
+Please let me know if you need more information.
+
+Thanks to this library, the work was a lot easier.
+
+Kripa

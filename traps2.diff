@@ -1,0 +1,199 @@
+diff --git a/examples/example5.go b/examples/example5.go
+index 59c1108..1767b4b 100644
+--- a/examples/example5.go
++++ b/examples/example5.go
+@@ -48,23 +48,19 @@ func main() {
+ 			AuthoritativeEngineBoots: 1,
+ 		},
+ 	}
+-	fmt.Println("before connect")
+ 	err := params.Connect()
+ 	if err != nil {
+ 		log.Fatalf("Connect() err: %v", err)
+ 	}
+ 	defer params.Conn.Close()
+-	fmt.Println("after connect")
+ 
+ 	//	oids := []string{"1.3.6.1.2.1.1.4.0", "1.3.6.1.2.1.1.7.0"}
+ 	for _, tp := range prefixV2Trap {
+ 		pdus = append(pdus, g.SnmpPDU{tp.oid, tp.pduType, tp.pduValue})
+ 
+ 	}
+-	fmt.Println("before sendtrap")
+ 	_, err2 := params.SendTrap(pdus) // Get() accepts up to g.MAX_OIDS
+ 	if err2 != nil {
+ 		log.Fatalf("Get() err: %v", err2)
+ 	}
+-	fmt.Println("after sendtrap")
+ }
+diff --git a/gosnmp.go b/gosnmp.go
+index 0f38120..7a0edff 100644
+--- a/gosnmp.go
++++ b/gosnmp.go
+@@ -217,6 +217,12 @@ func (x *GoSNMP) mkSnmpPacket(pdutype PDUType, nonRepeaters uint8, maxRepetition
+ 	}
+ }
+ 
++// SendTrap sends a SNMP Trap(v2c/v3 only)
++func (x *GoSNMP) SendTrap(pdus []SnmpPDU) (result *SnmpPacket, err error) {
++	packetOut := x.mkSnmpPacket(SNMPV2Trap, 0, 0)
++	return x.send(pdus, packetOut)
++}
++
+ // Get sends an SNMP GET request
+ func (x *GoSNMP) Get(oids []string) (result *SnmpPacket, err error) {
+ 	oidCount := len(oids)
+diff --git a/helper.go b/helper.go
+index 53a6fa0..69536de 100644
+--- a/helper.go
++++ b/helper.go
+@@ -320,6 +320,16 @@ func marshalInt16(value int) (rs []byte) {
+ 	return
+ }
+ 
++func marshalInteger(v interface{}) ([]byte, error) {
++	buf := new(bytes.Buffer)
++	err := binary.Write(buf, binary.BigEndian, v)
++	if err != nil {
++		return nil, err
++	}
++	return buf.Bytes(), nil
++}
++
++
+ // marshalLength builds a byte representation of length
+ //
+ // http://luca.ntop.org/Teaching/Appunti/asn1.html
+diff --git a/marshal.go b/marshal.go
+index c87d608..c809e06 100644
+--- a/marshal.go
++++ b/marshal.go
+@@ -82,6 +82,8 @@ type SnmpV3SecurityParameters interface {
+ 
+ // UsmSecurityParameters is an implementation of SnmpV3SecurityParameters for the UserSecurityModel
+ type UsmSecurityParameters struct {
++	localAESSalt uint64 // fix for mem alignment issues with 32bit procs
++	localDESSalt uint32
+ 	AuthoritativeEngineID    string
+ 	AuthoritativeEngineBoots uint32
+ 	AuthoritativeEngineTime  uint32
+@@ -95,8 +97,6 @@ type UsmSecurityParameters struct {
+ 	AuthenticationPassphrase string
+ 	PrivacyPassphrase        string
+ 
+-	localDESSalt uint32
+-	localAESSalt uint64
+ }
+ 
+ // Copy method for UsmSecurityParameters used to copy a SnmpV3SecurityParameters without knowing it's implementation
+@@ -263,9 +263,16 @@ func (x *GoSNMP) sendOneRequest(pdus []SnmpPDU, packetOut *SnmpPacket) (result *
+ 		}
+ 
+ 		var expected int
+-		if packetOut.PDUType == GetBulkRequest {
++		switch packetOut.PDUType {
++		case GetBulkRequest:
+ 			expected = int(packetOut.MaxRepetitions)
+-		} else {
++		case Trap, SNMPV2Trap:
++			err = dispatch_trap(x.Conn, outBuf)
++			if err != nil {
++				continue
++			}
++			return nil, nil
++		default:
+ 			expected = len(pdus)
+ 		}
+ 
+@@ -384,6 +391,10 @@ func (x *GoSNMP) send(pdus []SnmpPDU, packetOut *SnmpPacket) (result *SnmpPacket
+ 		return result, err
+ 	}
+ 
++	if result == nil {
++		return result, err
++	}
++
+ 	if result.Version == Version3 && result.SecurityModel == UserSecurityModel {
+ 		secParams, ok := result.SecurityParameters.(*UsmSecurityParameters)
+ 		if !ok || secParams == nil {
+@@ -774,22 +785,31 @@ func marshalVarbind(pdu *SnmpPDU) ([]byte, error) {
+ 		pduBuf.Write(oid)
+ 		pduBuf.Write([]byte{Null, 0x00})
+ 
+-	case Integer:
+-		// TODO tests currently only cover positive integers
+-		// Oid
++	case Integer, TimeTicks, Counter32:
+ 		tmpBuf.Write([]byte{byte(ObjectIdentifier), byte(len(oid))})
+ 		tmpBuf.Write(oid)
+ 		// Integer
+ 		var intBytes []byte
++		var err error
++
+ 		switch value := pdu.Value.(type) {
+ 		case byte:
+ 			intBytes = []byte{byte(pdu.Value.(int))}
+-		case int:
+-			intBytes = marshalInt16(value)
++		case int: 
++			val := int32(value)
++			intBytes, err = marshalInteger(val)
++			if err != nil {
++				return nil, err
++			}
++		case int32, uint32, int64, time.Duration:
++			intBytes, err = marshalInteger(value)
++			if err != nil {
++				return nil, err
++			}
+ 		default:
+-			return nil, fmt.Errorf("Unable to marshal PDU Integer; not byte or int.")
++			return nil, fmt.Errorf("Hmm! Unable to marshal %T", pdu.Value)
+ 		}
+-		tmpBuf.Write([]byte{byte(Integer), byte(len(intBytes))})
++		tmpBuf.Write([]byte{byte(pdu.Type), byte(len(intBytes))})
+ 		tmpBuf.Write(intBytes)
+ 		// Sequence, length of oid + integer, then oid/integer data
+ 		pduBuf.WriteByte(byte(Sequence))
+@@ -817,6 +837,26 @@ func marshalVarbind(pdu *SnmpPDU) ([]byte, error) {
+ 		pduBuf.WriteByte(byte(len(oid) + len(octetStringBytes) + 4))
+ 		pduBuf.Write(tmpBuf.Bytes())
+ 
++	case ObjectIdentifier:
++		//Oid
++		tmpBuf.Write([]byte{byte(ObjectIdentifier), byte(len(oid))})
++		tmpBuf.Write(oid)
++		//OctetString
++		var oidBytes []byte
++		switch value := pdu.Value.(type) {
++		case []byte:
++			oidBytes = value
++		case string:
++			oidBytes, _ = marshalOID(value)
++		default:
++			return nil, fmt.Errorf("Unable to marshal PDU ObjectIdentifier; not []byte or String.")
++		}
++		tmpBuf.Write([]byte{byte(ObjectIdentifier), byte(len(oidBytes))})
++		tmpBuf.Write(oidBytes)
++		// Sequence, length of oid + octetstring, then oid/octetstring data
++		pduBuf.WriteByte(byte(Sequence))
++		pduBuf.WriteByte(byte(len(oid) + len(oidBytes) + 4))
++		pduBuf.Write(tmpBuf.Bytes())
+ 	default:
+ 		return nil, fmt.Errorf("Unable to marshal PDU: unknown BER type %d", pdu.Type)
+ 	}
+@@ -1289,6 +1329,14 @@ func unmarshalVBL(packet []byte, response *SnmpPacket,
+ 	return response, nil
+ }
+ 
++func dispatch_trap(c net.Conn, outBuf []byte) error {
++	_, err := c.Write(outBuf)
++	if err != nil {
++		return fmt.Errorf("Error writing to socket: %s", err.Error())
++	}
++	return nil
++}
++
+ // dispatch request on network, and read the results into a byte array
+ //
+ // Previously, resp was allocated rxBufSize (65536) bytes ie a fixed size for
